@@ -1,7 +1,6 @@
 import sys
 from dataclasses import dataclass
-
-import numpy as np 
+import numpy as np
 import pandas as pd
 from sklearn.compose import ColumnTransformer
 from sklearn.impute import SimpleImputer
@@ -11,22 +10,23 @@ from sklearn.preprocessing import OneHotEncoder, StandardScaler
 from src.exception import CustomException
 from src.logger import logging
 import os
-
 from src.utils import save_object
 
 @dataclass
 class DataTransformationConfig:
-    # Fixed file name to 'preprocessor.pkl' for consistency
-    preprocessor_obj_file_path=os.path.join('artifacts',"preprocessor.pkl")  # Corrected filename
+    preprocessor_obj_file_path = os.path.join('artifacts', "preprocessor.pkl")
 
 class DataTransformation:
     def __init__(self):
         self.data_transformation_config = DataTransformationConfig()
 
     def get_data_transformer_object(self):
-        '''
-        This function is responsible for creating the data transformation pipeline
-        '''
+        """
+        Constructs and returns a preprocessing pipeline object that:
+        - Applies imputation for missing values
+        - Scales numerical features
+        - One-hot encodes categorical features
+        """
         try:
             numerical_columns = ["writing_score", "reading_score"]
             categorical_columns = [
@@ -37,7 +37,7 @@ class DataTransformation:
                 "test_preparation_course",
             ]
 
-            # Numerical data processing pipeline
+            # Numerical pipeline: Impute missing values and then scale
             num_pipeline = Pipeline(
                 steps=[
                     ("imputer", SimpleImputer(strategy="median")),
@@ -45,7 +45,7 @@ class DataTransformation:
                 ]
             )
 
-            # Categorical data processing pipeline
+            # Categorical pipeline: Impute missing values, One-Hot encode, and scale
             cat_pipeline = Pipeline(
                 steps=[
                     ("imputer", SimpleImputer(strategy="most_frequent")),
@@ -57,24 +57,27 @@ class DataTransformation:
             logging.info(f"Categorical columns: {categorical_columns}")
             logging.info(f"Numerical columns: {numerical_columns}")
 
-            # Column transformer that applies different pipelines to numerical and categorical data
+            # Combine both pipelines using ColumnTransformer
             preprocessor = ColumnTransformer(
-                [
+                transformers=[
                     ("num_pipeline", num_pipeline, numerical_columns),
                     ("cat_pipeline", cat_pipeline, categorical_columns)
                 ]
             )
 
             return preprocessor
-        
+
         except Exception as e:
+            logging.error(f"Error in getting data transformer object: {str(e)}")
             raise CustomException(e, sys)
 
-    def initiate_data_transformation(self, train_path, test_path):
-        '''
-        This function is responsible for applying data transformations on both the train and test datasets.
-        It returns transformed data arrays and saves the preprocessor object.
-        '''
+    def initiate_data_transformation(self, train_path: str, test_path: str):
+        """
+        Handles the entire data transformation pipeline:
+        - Reads data
+        - Preprocesses (scaling, encoding, etc.)
+        - Saves the preprocessing object
+        """
         try:
             # Reading the training and testing data
             train_df = pd.read_csv(train_path)
@@ -82,40 +85,37 @@ class DataTransformation:
 
             logging.info("Read train and test data completed")
 
-            logging.info("Obtaining preprocessing object")
-
-            # Get the preprocessing pipeline (transformer object)
+            # Obtain the preprocessing object
             preprocessing_obj = self.get_data_transformer_object()
 
             target_column_name = "math_score"
             numerical_columns = ["writing_score", "reading_score"]
 
-            # Splitting the data into features and target
+            # Split data into features and target
             input_feature_train_df = train_df.drop(columns=[target_column_name], axis=1)
             target_feature_train_df = train_df[target_column_name]
 
             input_feature_test_df = test_df.drop(columns=[target_column_name], axis=1)
             target_feature_test_df = test_df[target_column_name]
 
-            logging.info(f"Applying preprocessing object on training dataframe and testing dataframe.")
+            logging.info("Applying preprocessing object on training and testing dataframes.")
 
-            # Applying the preprocessing pipeline on training and testing data
+            # Apply the transformations to the features
             input_feature_train_arr = preprocessing_obj.fit_transform(input_feature_train_df)
             input_feature_test_arr = preprocessing_obj.transform(input_feature_test_df)
 
-            # Combining transformed features and targets
+            # Combine the transformed features with the target columns
             train_arr = np.c_[input_feature_train_arr, np.array(target_feature_train_df)]
             test_arr = np.c_[input_feature_test_arr, np.array(target_feature_test_df)]
 
-            logging.info(f"Saving preprocessing object to {self.data_transformation_config.preprocessor_obj_file_path}")
+            logging.info(f"Data transformation completed successfully.")
 
-            # Save the preprocessor object
+            # Save the preprocessing object to disk
             save_object(
                 file_path=self.data_transformation_config.preprocessor_obj_file_path,
                 obj=preprocessing_obj
             )
 
-            # Returning transformed data arrays and the path to the saved preprocessor object
             return (
                 train_arr,
                 test_arr,
@@ -123,4 +123,6 @@ class DataTransformation:
             )
 
         except Exception as e:
+            logging.error(f"Error during data transformation: {str(e)}")
             raise CustomException(e, sys)
+
